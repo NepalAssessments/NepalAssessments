@@ -6,9 +6,10 @@ function sheetLoaded(sheetData){
 
 function initDashboard(data){
     var months = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec',"No Date"];
+    var weeks = ['25 Apr','2 May','9 May','16 May','23 May','30 May','6 Jun','13 Jun','20 Jun','27 Jun','4 Jul','11 Jul','18 Jul','25 Jul','1 Aug','8 Aug','15 Aug','22 Aug','29 Aug','5 Sep','12 Sep','19 Sep','26 Sep','3 Oct','10 Oct','17 Oct','24 Oct','31 Oct','7 Nov','14 Nov','21 Nov','28 Nov','5 Dec','12 Dec','19 Dec','26 Dec'];
     var hxlSet = hxlate(data);
     var sectorList=getSectors(hxlSet);
-    var data = hxlToCF(hxlSet,sectorList,months);
+    var data = hxlToCF(hxlSet,sectorList,months,weeks);
     var cf = crossfilter(data);
 
     var color = '#056CB6';
@@ -35,6 +36,8 @@ function initDashboard(data){
     var sectorChart = dc.rowChart('#sectorChart');
     var mapChart = dc.leafletChoroplethChart('#mapChart');
 
+    var surveys = dc.numberDisplay('#selected');
+
     var monthDimension = cf.dimension(function(d){return d['date+week'];});
     var monthGroup = monthDimension.group();
 
@@ -44,7 +47,15 @@ function initDashboard(data){
     var mapDimension = cf.dimension(function(d){ return d['adm3+code']});
     var mapGroup = mapDimension.group();
 
+    var surveyDimension = cf.dimension(function(d){ return d['meta+assessmentid']});
+    var surveyGroup = surveyDimension.group();
+
     var all = cf.groupAll();
+
+    surveys
+        .valueAccessor(function(x){ return x;})
+        .group(unique_count(surveyGroup))
+        .formatNumber(function(x){ return Math.round(x);});
         
     sectorGroup.all = function() {
             var newObject = [];
@@ -60,24 +71,35 @@ function initDashboard(data){
     };
 
     monthChart.width($('#monthChart').width())
-        .height(100)
+        .height(110)
         .dimension(monthDimension) 
         .group(monthGroup)
+        .margins({top: 10, right: 50, bottom: 40, left: 30})
         .colors([color])
-        .x(d3.scale.linear().domain([0,d3.max(data,function(d){return d['date+week']})]))
+        .x(d3.scale.ordinal().domain(weeks))
+        .xUnits(dc.units.ordinal)
         .elasticY(true)
         .yAxis().ticks(3);
 
+    monthChart.renderlet(function (chart) {
+                    chart.selectAll("g.x text")
+                        .style("text-anchor", "end")
+                        //.attr('dx', '0')
+                      
+                        .attr('transform', "rotate(-45)");
+                })
 
     sectorChart.width($('#sectorChart').width())
         .height(510)
         .dimension(sectorDimension) 
         .group(sectorGroup)
+        .margins({top: 10, right: 50, bottom: 40, left: 30})
             .colors(['#CCCCCC', color])
             .colorDomain([0, 1])
             .colorAccessor(function (d) {
                 return 1;
             }) 
+        .labelOffsetY(25)
         .elasticX(true)
         .xAxis().ticks(4);
 
@@ -172,7 +194,17 @@ function initDashboard(data){
 
     var map = mapChart.map();
     
-
+    function unique_count(group) {
+        return {
+            value: function() {
+                console.log(group.all().filter(function(kv) {
+                   return kv.value > 0}).length);
+                return group.all().filter(function(kv) {
+                   return kv.value > 0;
+                }).length;
+            }
+        };
+    }
 
 }
 
@@ -203,9 +235,9 @@ function hxlate(data){
     return hxl.wrap(hxlSet);
 }
 
-function hxlToCF(hxlSet,sectorList,months){
+function hxlToCF(hxlSet,sectorList,months,weeks){
 
-    var columns = ['#org+lead','#adm3+name','#adm3+code','#adm4','#date+published','#meta+assessmenttitle','#meta+url'];
+    var columns = ['#org+lead','#adm3+name','#adm3+code','#adm4','#date+published','#meta+assessmenttitle','#meta+url','#meta+assessmentid'];
     var cfData = [];
 
     hxlSet.forEach(function(r){
@@ -234,7 +266,7 @@ function hxlToCF(hxlSet,sectorList,months){
         if(month==undefined){
             month='No Date';
         }
-        d['date+week'] = week;
+        d['date+week'] = weeks[week];
     });
     
     return cfData;
